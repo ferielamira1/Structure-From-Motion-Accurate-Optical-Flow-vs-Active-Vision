@@ -6,6 +6,8 @@ import numpy as np
 from rosbag.bag import Bag
 import cv2
 from cv_bridge import CvBridge
+from rospy_message_converter import message_converter
+from scipy.spatial.transform import Rotation as R
 
 def find_match(pose_stime, frame_infos, frames):
     frame_stime = rospy.Time(secs=frame_infos[0]["header"]["stamp"]["secs"],
@@ -19,8 +21,33 @@ def find_match(pose_stime, frame_infos, frames):
     return frame_infos, frames
 
 
+def transformation_matrix(tf_base_camera):
+    """Calculates the 4x4 transformation matrix from a ROS TransformStamped message
 
-def rosbag_to_vel(rosbagf, tf_topics, pose_topic):
+       Args:
+       - tf_base_camera: A ROS TransformStamped message representing the transformation between two coordinate frames.
+
+       Returns:
+       - tf_matrix: A 4x4 transformation matrix representing the rotation and translation between the two frames.
+
+       """
+    tf_quat_base_camera = tf_base_camera.transform.rotation
+    r = R.from_quat([tf_quat_base_camera.x, tf_quat_base_camera.y, tf_quat_base_camera.z, tf_quat_base_camera.w])
+    tf_rot_matrix = r.as_matrix()
+
+    # Create 4x4 transformation matrix
+    tf_matrix = np.zeros((4, 4))
+    tf_matrix[:3, :3] = tf_rot_matrix
+    tf_matrix[0, 3] = tf_base_camera.transform.translation.x
+    tf_matrix[1, 3] = tf_base_camera.transform.translation.y
+    tf_matrix[2, 3] = tf_base_camera.transform.translation.z
+    tf_matrix[3, 3] = 1
+    return tf_matrix
+
+
+
+
+def rosbag_to_vel(rosbagf, tf_topics, pose_topic,buf):
     """
     Extracts end effector position and rotation from a ROS bag file containing messages of type `geometry_msgs/PoseStamped`
     and `geometry_msgs/TransformStamped`. The end effector position is transformed into the camera optical frame.
@@ -39,26 +66,17 @@ def rosbag_to_vel(rosbagf, tf_topics, pose_topic):
     t_vels = []
     r_vels = []
     first = True
-    try:
-        rospy.init_node("depth_estimation")
-    except:
-        print("Already registered")
-
-    try:
-        buffer = tf2.Buffer(rospy.Duration(10000))
-    except:
-        print("Buffer could not be initialized")
     # Open the ROS bag
     bag = rosbag.Bag(rosbagf)
     stime = rospy.Time()
 
     # Iterate through the messages in the bag
-    for topic, msg, t in bag.read_messages(topics=[tf_topics]):
+    for topic, msg, t in bag.read_messages(topics=tf_topics):
         for msg_tf in msg.transforms:
             if topic == '/tf_static':
-                buffer.set_transform_static(msg_tf, "default_authority")
+                buf.set_transform_static(msg_tf, "default_authority")
             else:
-                buffer.set_transform(msg_tf, "default_authority")
+                buf.set_transform(msg_tf, "default_authority")
 
     for topic, msg, t in bag.read_messages(topics=[pose_topic]):
         try:
@@ -66,9 +84,9 @@ def rosbag_to_vel(rosbagf, tf_topics, pose_topic):
             O_dp_EE_c = np.array(msg.O_dP_EE_c)  # .reshape((4,4)).T
 
             # end effector pose in base frame
-            tf_base_EE = buffer.lookup_transform('panda_EE', 'panda_link0', msg.header.stamp)
+            tf_base_EE = buf.lookup_transform('panda_EE', 'panda_link0', msg.header.stamp)
             tf_mbase_EE = transformation_matrix(tf_base_EE)  # same as: O_T_EE= np.array(msg.O_T_EE).reshape((4,4)).T
-            tf_camera_EE = buffer.lookup_transform('camera_color_optical_frame', 'panda_EE', msg.header.stamp)
+            tf_camera_EE = buf.lookup_transform('camera_color_optical_frame', 'panda_EE', msg.header.stamp)
             tf_mcamera_EE = transformation_matrix(tf_camera_EE)
             p_camera = (tf_mcamera_EE[:3, :3] @ (tf_mbase_EE[:3, :3] @ O_dp_EE_c[:3].reshape(3, 1)))
             rotvec_camera = (tf_mcamera_EE[:3, :3] @ (tf_mbase_EE[:3, :3] @ O_dp_EE_c[3:].reshape(3, 1)))
@@ -82,7 +100,7 @@ def rosbag_to_vel(rosbagf, tf_topics, pose_topic):
         except Exception as e:
             print(e)
 
-    buffer.clear()
+    buf.clear()
     bag.close()
     return t_vels, r_vels, stime
 
@@ -117,7 +135,7 @@ def rosbag_to_dataset(rosbagf ,rosbag_topic, outputf):
     for topic, msg, t in bag.read_messages(topics=[rosbag_topic]):
         # converting message to a dictionary
         cv_img = bridge.compressed_imgmsg_to_cv2(msg)
-        img_dict = convert_ros_message_to_dictionary(msg, True)
+        img_dict = message_converter.convert_ros_message_to_dictionary(msg)
         cv_imgs.append(cv_img)
         img_dicts.append(img_dict)
 
@@ -147,7 +165,7 @@ def rosbag_to_dict(rosbagf ,topic):
     count = 0
     infos =[]
     for topic, msg, t in bag.read_messages(topics=[topic]):
-        info_dict = convert_ros_message_to_dictionary(msg, True)
+        info_dict = message_converter.convert_ros_message_to_dictionary(msg)
         infos.append(info_dict)
 
     bag.close()
@@ -207,7 +225,7 @@ def get_trials():
     trials_ld_gl_oblique= [
         {"trial": "approxdist_100cm_markersize_270mm_heuristic4gain_0.05_gazelock_oblique_2021-10-26-12-06-10", "gt": 1, "marker_size": 0.27,"marker_type":"oblique","trial_type":"gazelock"},
         {"trial": "approxdist_150cm_markersize_270mm_heuristic4gain_0.05_gazelock_oblique_2021-10-26-12-17-35", "gt": 1.5, "marker_size": 0.27,"marker_type":"oblique","trial_type":"gazelock"},
-        {"trial": "approxdist_200cm_markersize_400mm_heuristic4gain_0.05_gazelock_oblique_2021-10-26-12-23-40", "gt": 2, "marker_size": 0.4,"marker_type":"oblique","trial_type":"gazelock"},
+        {"trial": "approxdist_200cm_markersize_400mm_heuristic4gain_0.05_gazelock_oblique_2021-10-26-12-29-30", "gt": 2, "marker_size": 0.4,"marker_type":"oblique","trial_type":"gazelock"},
         {"trial": "approxdist_270cm_markersize_400mm_heuristic4gain_0.05_gazelock_oblique_2021-10-26-12-40-20", "gt": 2.7, "marker_size": 0.4,"marker_type":"oblique","trial_type":"gazelock"},
         {"trial": "approxdist_330cm_markersize_400mm_heuristic4gain_0.075_gazelock_oblique_2021-10-26-12-48-25", "gt": 3.3, "marker_size": 0.4,"marker_type":"oblique","trial_type":"gazelock"},
         {"trial": "approxdist_400cm_markersize_400mm_heuristic4gain_0.075_gazelock_oblique_2021-10-26-13-00-56", "gt": 4, "marker_size": 0.4,"marker_type":"oblique","trial_type":"gazelock"},

@@ -2,7 +2,7 @@ from mmflow.apis import init_model, inference_model
 from mmflow.datasets import visualize_flow, write_flow
 import numpy as np
 import random
-
+import cv2
 def get_models():
     """
     A function that returns a list of dictionaries, each representing an optic flow algorithm model.
@@ -36,7 +36,7 @@ def get_models():
     irrpwc_dict = {
         "config_f": "models/configs/irr/irrpwc_ft_4x1_300k_sintel_final_384x768.py",
         "checkpoint_f": "models/checkpoints/irrpwc_ft_4x1_300k_sintel_final_384x768.pth",
-        "name": " IRR-PWC"
+        "name": "IRR-PWC"
     }
     models = [pwcnet_dict, irrpwc_dict, raft_dict, gma_dict]
     return models
@@ -72,19 +72,19 @@ def marker_flow(corners ,flow, marker_type ,img_shape):
     for y in range(h_min ,h_max):
         for x in range(w_min ,w_max):
             dist= cv2.pointPolygonTest(rect ,(x ,y) ,False)
-            if (dist>=0 and random.choice([True, False])):  # and (x == w_min or x==w_max or y == h_min or y == h_max)):
+            if (dist>=0):# and ((y<=h_min+abs(h_max - h_min)/5 or y>=h_max-abs(h_max - h_min)/5)) and random.choice([True, False])):  # and (x == w_min or x==w_max or y == h_min or y == h_max)):
                 img_velocity_x.append(flow[y ,x ,0])
                 img_velocity_y.append(flow[y ,x ,1])
 
-    img_velocity_x = iqr(1.0,np.array(img_velocity_x))
+    img_velocity_x = iqr(0.8,np.array(img_velocity_x))
     img_velocity_x = np.mean(img_velocity_x)
 
-    img_velocity_y = iqr(1.0,np.array(img_velocity_y))
+    img_velocity_y = iqr(0.8,np.array(img_velocity_y))
     img_velocity_y = np.mean(img_velocity_y)
 
     return np.array([[img_velocity_x] ,[img_velocity_y]])
 
-def inference(model,img1,img2,fps,display_flow,t,i):
+def inference(model,mname, img1,img2,fps,display_flow,t,i):
     """
     Function: inference
 
@@ -107,14 +107,34 @@ def inference(model,img1,img2,fps,display_flow,t,i):
 
     flow: An estimated flow vector between the two input images
     """
-    if t.trial_type == "translational":
-        flow = inference_model(model, img1, img2) * fps  # pixel / second
-        # Save the optical flow file
-        if display_flow and i % 4 == 0:
-            write_flow(flow, flow_file='flow_{}.flo'.format(i))
-            # save the visualized flow map
-            flow_map = visualize_flow(flow, save_file='flow/flow_map_{}_{}_{}_{}.png'.format(
-                t.marker_type, t.trial_type, str(t.gt), str(i * 2)))
+    if t["trial_type"]=="gazelock":
+        flow = np.zeros((img1.shape[0],img1.shape[0],2))
     else:
-        flow = np.array([[0], [0], [0]])
+      flow = inference_model(model, img1, img2) * fps  # pixel / second
+      # Save the optical flow file
+      if display_flow and i % 4 == 0 and mname=="IRR-PWC":
+          write_flow(flow, flow_file='flow_{}.flo'.format(i))
+          # save the visualized flow map
+          flow_map = visualize_flow(flow, save_file='flow/flow_map_{}_{}_{}_{}.png'.format(
+              t['marker_type'], t["trial_type"], str(t["gt"]), str(i * 2)))
+
     return flow
+
+
+def iqr(thresh, a):
+    """
+    Applies the interquartile range (IQR) method to remove outliers from a numpy array.
+
+    Args:
+        thresh (float): The threshold value for the IQR method. Typically a value of 1.5 is used.
+        a (numpy.ndarray): The input array to remove outliers from.
+
+    Returns:
+        numpy.ndarray: The input array with outliers removed based on the IQR method.
+    """
+    a = np.array(a).flatten()
+    Q1 = np.quantile(a, 0.25)
+    Q3 = np.quantile(a, 0.75)
+    IQR = Q3 - Q1
+    a = a[~((a < (Q1 - thresh * IQR)) | (a > (Q3 + thresh * IQR)))]
+    return a

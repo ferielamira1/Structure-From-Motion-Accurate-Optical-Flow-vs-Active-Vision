@@ -32,7 +32,7 @@ def corner_detection(img1, img2, last_corners,i):
         corners = corners2
 
     if corners.shape[0] > 1:
-        print("Detection error at iteration {}: {} markers were detected \n".format(i, corners.shape[0]))
+        #print("Detection error at iteration {}: {} markers were detected \n".format(i, corners.shape[0]))
         if last_corners.shape[0] < 1:
             print("Last corners is an empty array at iteration {}".format(i))
             return [], False
