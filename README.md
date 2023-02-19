@@ -1,46 +1,38 @@
 # Structure From Motion: Accurate Optical Flow vs Active Vision
 
-## Introduction
-This project aims to explore and compare the performance of two approaches for depth estimation using visual data captured by a monocular camera: accurate optical flow and active vision. The project makes use of state-of-the-art optical flow algorithms such as PWC-Net, RAFT, GMA, and IRR-PWC, and compares their performance to that of fixation-based active vision.
-
-## Background
-Structure from Motion (SfM) is a computer vision technique that leverages motion parallax to estimate depth to any visible point in the world. Optical flow is a commonly used tool in SfM, which captures the apparent movement of different objects in the visual field. However, many classical optical flow methods are plagued by the aperture problem, resulting in distance overestimates.
-
-Active vision, on the other hand, involves taking actions to simplify perception. Fixation-based active vision has shown superior depth recovery to specific points than naive SfM, due to regularities made apparent in visual motion representation (optic flow) that sidesteps the aperture problem.
-
 ## Project Overview
-The project aims to compare the performance of state-of-the-art optical flow algorithms such as PWC-Net, RAFT, GMA, and IRR-PWC for depth estimation, and to compare their performance with that of fixation-based active vision. The project uses the mmflow library for deep learning-based optic flow algorithms and mmdetection for marker detection.
+Estimating depth of objects in a video is an important problem in computer vision, with practical applications in robotics, autonomous driving,etc. . One traditional method for estimating depth is Structure from Motion (SfM), which uses the motion of a camera to reconstruct the 3D structure of a scene. To achieve this two pathways are of interest: 
+1. Generating camera movement and estimating the velocity of the target projection onto the image plane using state-of-the-art optical flow algorithms. Then relating the 3D camera velocity to the velocity of the projected target
+2. Orchestrating the camera movement to fixate on the target, which creates a coupling between the translational and rotational velocities of the camera. This coupling is then used to estimate the depth of the target.  This method relies on the robots proprioception and was introduced by [5]
 
-The project found that IRR-PWC had the best performance among the tested algorithms, and compared its performance with fixation-based active vision.
+In this work, we implement and compare the above mentioned methods and  compare their performance in terms of accuracy, run-time, and specifications. 
+
+We found that IRR-PWC had the best performance among the tested DL-based optic flow algorithms (RAFT,GMA,IRR-PWC).
+We found that Sfm with fixation-based active vision is better suited in scenarios where the target is close to the camera 
+We found that Sfm with optic flow  is better suited in scenarios where the target has more complex features or bigger size and is further away from the camera.
 
 ## Code Structure
 The project's code is organized as follows:
 
 - rosbags: contains the data used in the experiments
-- models: contains the trained models for the different algorithms. This 
+- models: contains the trained models for the different algorithms. 
 - results: contains the results of the experiments
-- src: contains the source code for the project, including an .ipynb implementation.
+- src: contains the main.py (and .ipynb) file and the necessarry utilities for handling the rosbags, target detection, optic flow and depth estimation.
 ### Getting Started
+The code was implemented and tested on Google Colab, I added a main.py version in case there are problems with the execution on Colab.
 #### Local execution
 To run the project, you will need to clone this repository and install the dependencies. 
 You can use the following commands:
 1. Clone repository and enter top folder:
-``` 
-git clone ... 
-cd ./depth_estimation
-```
-
-3. The OpenMIM library should be installed:
-
+2. Install the OpenMIM library :
 ``` pip3 install -U openmim ``` 
-2. The MMCV-full package should be installed using MIM:
-
+3. Install the MMCV-full package using MIM:
 ``` mim install mmcv-full``` 
-3. The MMFlow library should be installed:
+4. Install the MMFlow library :
+``` pip3 install mmflow ```
+5. Install ROS (Robot Operating System)
 
-
-``` pip3 install mmflow ``` 
-4. ROS (Robot Operating System) should be installed:
+Before runninng the code the rosbags in the "largedist_eval" folder on tubcloud need to downloaded  under their original names and put in the rosbags folder
 
 ``` 
 sudo sh -c  echo "deb http://packages.ros.org/ros/ubuntu $(lsb_release -sc) main" > /etc/apt/sources.list.d/ros-latest.list'])
@@ -52,13 +44,23 @@ pip install --extra-index-url https://rospypi.github.io/simple/ tf2-ros
 pip install bagpy
 pip install cvbridge3
 ``` 
+To run the code you first need to start roscore then run src/main.py
 #### Note: 
 The above installation commands assume the use of Ubuntu and ROS Noetic. If using a different operating system or version of ROS, the installation commands may be different.
 
 #### Google Colab
-The installation is self-contained in "src/main.ipynb"
 
-After installing the dependencies, you can run the experiments using the scripts in the src directory.
+1. Open Google Colab in your web browser.
+2. Click on "New Notebook" to create a new notebook. 
+3. In the new notebook, Change the "Runtime type" to "GPU" 
+4. Click on "File" in the top left corner and select "Open notebook". 
+5. In the dialog box that appears, click on the "GitHub" tab. 
+6. Enter the URL of the GitHub repository you want to open in the search box and click on the magnifying glass icon to search. 
+7. Once the repository is found, click on the "Open in Colab" button next to the repository name. 
+8. Before runninng the code the rosbags in the "largedist_eval" folder on tubcloud need to downloaded  under their original names and put in the rosbags folder
+9. Once the repository is loaded, you can install all dependencies, start roscore and run the code by opening src/main.ipynb  clicking on "Run all"
+#### Note: 
+If the repository is private, you'll need to provide Colab with your GitHub credentials to access it. You can do this by clicking on the "Connect to GitHub" button that appears when you try to open a private repository.
 
 ## Conclusion
 The project explored the performance of state-of-the-art optical flow algorithms for depth estimation and compared it with fixation-based active vision. The project found that IRR-PWC had the best performance among the tested algorithms and compared its performance with fixation-based active vision. The project's code is available in the src directory, and the results of the experiments are available in the results directory.
